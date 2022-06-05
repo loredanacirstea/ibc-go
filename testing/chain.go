@@ -281,16 +281,12 @@ func (chain *TestChain) NextBlock() {
 	chain.NextVals = ApplyValSetChanges(chain.T, chain.Vals, res.ValidatorUpdates)
 
 	// increment the current header
-	chain.CurrentHeader = tmproto.Header{
-		ChainID: chain.ChainID,
-		Height:  chain.App.LastBlockHeight() + 1,
-		AppHash: chain.App.LastCommitID().Hash,
-		// NOTE: the time is increased by the coordinator to maintain time synchrony amongst
-		// chains.
-		Time:               chain.CurrentHeader.Time,
-		ValidatorsHash:     chain.Vals.Hash(),
-		NextValidatorsHash: chain.NextVals.Hash(),
-	}
+	// NOTE: the time is increased by the coordinator to maintain time synchrony amongst
+	// chains.
+	chain.CurrentHeader.Height = chain.App.LastBlockHeight() + 1
+	chain.CurrentHeader.AppHash = chain.App.LastCommitID().Hash
+	chain.CurrentHeader.ValidatorsHash = chain.Vals.Hash()
+	chain.CurrentHeader.NextValidatorsHash = chain.NextVals.Hash()
 
 	chain.App.BeginBlock(abci.RequestBeginBlock{Header: chain.CurrentHeader})
 }
