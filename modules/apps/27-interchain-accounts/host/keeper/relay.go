@@ -1,6 +1,8 @@
 package keeper
 
 import (
+	"fmt"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	"github.com/gogo/protobuf/proto"
@@ -13,21 +15,24 @@ import (
 // OnRecvPacket handles a given interchain accounts packet on a destination host chain.
 // If the transaction is successfully executed, the transaction response bytes will be returned.
 func (k Keeper) OnRecvPacket(ctx sdk.Context, packet channeltypes.Packet) ([]byte, error) {
+	fmt.Println("--ICA-host--OnRecvPacket---")
 	var data icatypes.InterchainAccountPacketData
 
 	if err := icatypes.ModuleCdc.UnmarshalJSON(packet.GetData(), &data); err != nil {
 		// UnmarshalJSON errors are indeterminate and therefore are not wrapped and included in failed acks
 		return nil, sdkerrors.Wrapf(icatypes.ErrUnknownDataType, "cannot unmarshal ICS-27 interchain account packet data")
 	}
-
+	fmt.Println("--ICA-host--OnRecvPacket---", data.Type, icatypes.EXECUTE_TX)
 	switch data.Type {
 	case icatypes.EXECUTE_TX:
 		msgs, err := icatypes.DeserializeCosmosTx(k.cdc, data.Data)
+		fmt.Println("--ICA-host--OnRecvPacket-msgs-err-", err)
 		if err != nil {
 			return nil, err
 		}
 
 		txResponse, err := k.executeTx(ctx, packet.SourcePort, packet.DestinationPort, packet.DestinationChannel, msgs)
+		fmt.Println("--ICA-host--OnRecvPacket-txResponse--", txResponse)
 		if err != nil {
 			return nil, err
 		}
@@ -44,18 +49,20 @@ func (k Keeper) OnRecvPacket(ctx sdk.Context, packet channeltypes.Packet) ([]byt
 // execution of the transaction is atomic, all state changes are reverted if a single message fails.
 func (k Keeper) executeTx(ctx sdk.Context, sourcePort, destPort, destChannel string, msgs []sdk.Msg) ([]byte, error) {
 	channel, found := k.channelKeeper.GetChannel(ctx, destPort, destChannel)
+	fmt.Println("--ICA-host--OnRecvPacket-executeTx-", channel, found)
 	if !found {
 		return nil, channeltypes.ErrChannelNotFound
 	}
 
 	if err := k.authenticateTx(ctx, msgs, channel.ConnectionHops[0], sourcePort); err != nil {
+		fmt.Println("--ICA-host--OnRecvPacket--authenticateTx-err-", err)
 		return nil, err
 	}
-
+	fmt.Println("--ICA-host--OnRecvPacket-post-authenticateTx-", len(msgs))
 	txMsgData := &sdk.TxMsgData{
 		Data: make([]*sdk.MsgData, len(msgs)),
 	}
-
+	fmt.Println("--ICA-host--OnRecvPacket--txMsgData-", txMsgData)
 	// CacheContext returns a new context with the multi-store branched into a cached storage object
 	// writeCache is called only if all msgs succeed, performing state transitions atomically
 	cacheCtx, writeCache := ctx.CacheContext()
@@ -65,6 +72,7 @@ func (k Keeper) executeTx(ctx sdk.Context, sourcePort, destPort, destChannel str
 		}
 
 		msgResponse, err := k.executeMsg(cacheCtx, msg)
+		fmt.Println("--ICA-host--OnRecvPacket--executeMsg-", msgResponse, err)
 		if err != nil {
 			return nil, err
 		}
@@ -92,6 +100,7 @@ func (k Keeper) executeTx(ctx sdk.Context, sourcePort, destPort, destChannel str
 // from state using the provided controller port identifier
 func (k Keeper) authenticateTx(ctx sdk.Context, msgs []sdk.Msg, connectionID, portID string) error {
 	interchainAccountAddr, found := k.GetInterchainAccountAddress(ctx, connectionID, portID)
+	fmt.Println("--ICA-host--OnRecvPacket--authenticateTx-", interchainAccountAddr, found)
 	if !found {
 		return sdkerrors.Wrapf(icatypes.ErrInterchainAccountNotFound, "failed to retrieve interchain account on port %s", portID)
 	}
@@ -99,11 +108,13 @@ func (k Keeper) authenticateTx(ctx sdk.Context, msgs []sdk.Msg, connectionID, po
 	allowMsgs := k.GetAllowMessages(ctx)
 	for _, msg := range msgs {
 		if !types.ContainsMsgType(allowMsgs, msg) {
+			fmt.Println("--ICA-host--OnRecvPacket--authenticateTx-not allowed--", msg)
 			return sdkerrors.Wrapf(sdkerrors.ErrUnauthorized, "message type not allowed: %s", sdk.MsgTypeURL(msg))
 		}
 
 		for _, signer := range msg.GetSigners() {
 			if interchainAccountAddr != signer.String() {
+				fmt.Println("--ICA-host--OnRecvPacket--authenticateTx-signer not allowed--", interchainAccountAddr, signer.String())
 				return sdkerrors.Wrapf(sdkerrors.ErrUnauthorized, "unexpected signer address: expected %s, got %s", interchainAccountAddr, signer.String())
 			}
 		}
@@ -116,11 +127,13 @@ func (k Keeper) authenticateTx(ctx sdk.Context, msgs []sdk.Msg, connectionID, po
 // If the message execution is successful, the proto marshaled message response will be returned.
 func (k Keeper) executeMsg(ctx sdk.Context, msg sdk.Msg) ([]byte, error) {
 	handler := k.msgRouter.Handler(msg)
+	fmt.Println("--ICA-host--OnRecvPacket--executeMsg handler-", handler)
 	if handler == nil {
 		return nil, icatypes.ErrInvalidRoute
 	}
 
 	res, err := handler(ctx, msg)
+	fmt.Println("--ICA-host--OnRecvPacket--executeMsg handler()-err-", err)
 	if err != nil {
 		return nil, err
 	}

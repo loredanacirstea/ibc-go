@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"fmt"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	capabilitytypes "github.com/cosmos/cosmos-sdk/x/capability/types"
@@ -147,6 +149,7 @@ func (im IBCMiddleware) OnAcknowledgementPacket(
 	acknowledgement []byte,
 	relayer sdk.AccAddress,
 ) error {
+	fmt.Println("----ICA controller--OnAcknowledgementPacket-")
 	if !im.keeper.IsControllerEnabled(ctx) {
 		return types.ErrControllerSubModuleDisabled
 	}

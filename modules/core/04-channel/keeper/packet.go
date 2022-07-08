@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -127,7 +128,13 @@ func (k Keeper) SendPacket(
 	k.SetPacketCommitment(ctx, packet.GetSourcePort(), packet.GetSourceChannel(), packet.GetSequence(), commitment)
 
 	EmitSendPacketEvent(ctx, packet, channel, timeoutHeight)
-
+	fmt.Println("----04channel---SendPacket----", timeoutHeight,
+		"sequence", strconv.FormatUint(packet.GetSequence(), 10),
+		"src_port", packet.GetSourcePort(),
+		"src_channel", packet.GetSourceChannel(),
+		"dst_port", packet.GetDestPort(),
+		"dst_channel", packet.GetDestChannel(),
+	)
 	k.Logger(ctx).Info(
 		"packet sent",
 		"sequence", strconv.FormatUint(packet.GetSequence(), 10),
@@ -149,7 +156,9 @@ func (k Keeper) RecvPacket(
 	proof []byte,
 	proofHeight exported.Height,
 ) error {
+	fmt.Println("--04channel-RecvPacket---")
 	channel, found := k.GetChannel(ctx, packet.GetDestPort(), packet.GetDestChannel())
+	fmt.Println("--04channel-RecvPacket-channel, found--", channel, found)
 	if !found {
 		return sdkerrors.Wrap(types.ErrChannelNotFound, packet.GetDestChannel())
 	}
@@ -189,6 +198,7 @@ func (k Keeper) RecvPacket(
 	// sent optimistically before connection and channel handshake completed. However, to receive a packet,
 	// connection and channel must both be open
 	connectionEnd, found := k.connectionKeeper.GetConnection(ctx, channel.ConnectionHops[0])
+	fmt.Println("--04channel-RecvPacket-connectionEnd, found--", connectionEnd, found)
 	if !found {
 		return sdkerrors.Wrap(connectiontypes.ErrConnectionNotFound, channel.ConnectionHops[0])
 	}
